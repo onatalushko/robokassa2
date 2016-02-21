@@ -1,0 +1,555 @@
+<?php
+
+/**
+ * @file
+ * Drupal Commerce Robokassa payment method.
+ *
+ * This module contains basic integration with Robokassa
+ * for Drupal Commerce.
+ */
+
+/**
+ * Implements hook_commerce_payment_method_info().
+ */
+function commerce_robokassa_commerce_payment_method_info() {
+  $payment_methods = array();
+
+  $payment_methods['commerce_robokassa'] = array(
+    'title' => t('robokassa'),
+    'description' => t('Provides the payment method for robokassa service.'),
+    'active' => TRUE,
+    'terminal' => FALSE,
+    'offsite' => TRUE,
+    'offsite_autoredirect' => TRUE,
+  );
+
+  return $payment_methods;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function commerce_robokassa_menu() {
+  $items['commerce_robokassa/%commerce_robokassa_pm/status'] = array(
+    'title' => 'Payment status',
+    'page callback' => 'commerce_robokassa_status',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['commerce_robokassa/%commerce_robokassa_pm/result'] = array(
+    'title' => 'Result of payment through robokassa Merchant',
+    'page callback' => 'commerce_robokassa_result',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Payment method loader.
+ *
+ * Load payment method with settings from url arg to support multiple payment
+ * method instance if need.
+ *
+ * @param string $instance_id
+ *   Variable part of payment method instance.
+ *
+ * @return bool
+ *   Payment method instance.
+ */
+function commerce_robokassa_pm_load($instance_id) {
+  $instance_id = 'commerce_robokassa|commerce_payment_' . $instance_id;
+  return commerce_payment_method_instance_load($instance_id);
+}
+
+/**
+ * Page callback: commerce_robokassa/%commerce_robokassa_pm/status.
+ *
+ * Fallback call interaction menu callback because IK bug on payment
+ * processing
+ * Q: If must the interaction url call when result fail or panding ?
+ *    Or this statuses must be processed in Return Form callback?
+ * A: Now request is sent to Interaction URL only in case of success
+ *    payment, we working on this now.
+ *
+ * @param mixed $payment_method
+ *   Drupal commerce payment method instance passed via url param.
+ */
+function commerce_robokassa_status($payment_method) {
+  // @todo refactor
+
+  $data = $_POST;
+
+  if (isset($data['ik_inv_st']) && $data['ik_inv_st'] != 'success') {
+    commerce_robokassa_interaction($payment_method, FALSE);
+  }
+
+  if (isset($data['InvId'])) {
+    $transaction = commerce_payment_transaction_load($data['InvId']);
+    if ($transaction) {
+      $order = commerce_order_load($transaction->order_id);
+      if ($order) {
+        // @todo Have we something like remote payment status in response?
+        $fail_statuses = array('fail','canceled');
+        if (in_array($data['ik_inv_st'], $fail_statuses)) {
+          drupal_set_message(t('Payment failed at the payment server. Please review your information and try again.'), 'error');
+        }
+        drupal_goto(commerce_checkout_order_uri($order));
+      }
+    }
+  }
+
+  drupal_exit();
+}
+
+/**
+ * Helper to validate IK $_POST data.
+ *
+ * @param mixed $data
+ *   $_POST to be validated.
+ * @param mixed $payment_method
+ *   Drupal commerce payment method instance passed via url param.
+ * @param bool $is_interaction
+ *   Fallback call flag.
+ *
+ * @return bool|mixed
+ *   Transaction according to POST data or due.
+ */
+function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_interaction = TRUE) {
+  // @todo refactor
+
+  // Exit now if the $_POST was empty.
+  if (empty($data)) {
+    watchdog('commerce_robokassa', 'Interaction URL accessed with no POST data submitted.', array(), WATCHDOG_WARNING);
+    drupal_exit();
+  }
+
+  // Exit now if any required keys are not exists in $_POST.
+  $required_keys = array('OutSum','InvId','Shp_item','SignatureValue');
+  $unavailable_required_keys = array_diff_key(array_flip($required_keys), $data);
+  if (!empty($unavailable_required_keys)) {
+    watchdog('commerce_robokassa', 'Missing POST keys. POST data: <pre>!data</pre>', array('!data' => print_r($unavailable_required_keys, TRUE)), WATCHDOG_WARNING);
+    drupal_exit();
+  }
+
+  $settings = (isset($payment_method['settings']) ? $payment_method['settings'] : commerce_robokassa_default_settings());
+  // Exit now if missing Checkout ID.
+  if (empty($settings['MrchLogin'])) {
+    $info = array(
+      '!settings' => print_r($payment_method, 1),
+      '!data' => print_r($data, TRUE),
+    );
+    watchdog('commerce_robokassa !data', 'Missing merchant ID.  POST data: <pre>!data</pre> <pre>!settings</pre>',
+      $info, WATCHDOG_WARNING);
+    drupal_exit();
+  }
+
+  if ($is_interaction) {
+    if ($payment_method) {
+      // robokassa Signature.
+      $robo_sign = $data['SignatureValue'];
+
+      // Create own Signature.
+      $signature_data = array(
+        $data['OutSum'],
+        $data['InvId'],
+        $settings['pass2'],
+        'shp_order_id=' . $data['Shp_item'],
+      );
+
+      $sign = md5(implode(':', $signature_data));
+
+      // Exit now if missing Signature.
+      if ($robo_sign != $sign) {
+        watchdog('commerce_robokassa', 'Missing Signature.  POST data: !data', array('!data' => print_r($data, TRUE)), WATCHDOG_WARNING);
+        drupal_exit();
+      }
+    }
+  }
+
+  $transaction = commerce_payment_transaction_load($data['InvId']);
+  if (!$transaction) {
+    watchdog('commerce_robokassa', 'Missing transaction id.  POST data: !data', array('!data' => print_r($data, TRUE)), WATCHDOG_WARNING);
+    drupal_exit();
+  }
+
+  return $transaction;
+}
+
+/**
+ * Page callback: commerce_robokassa/%commerce_robokassa_pm/interaction.
+ *
+ * I do not use default payment method redirect_validate  because
+ * in checkout/' . $order->order_id . '/payment/return/' .
+ *       $order->data['payment_redirect_key']
+ * and checkout/ ' . $order->order_id . '/payment/back/' .
+ *       $order->data['payment_redirect_key']
+ * callbacks that calls CALLBACK_redirect_validate payment transaction
+ * processing and user redirect are combined.
+ * So delayed payment processing is impossible also all payment systems
+ * (and IK) require change order\transaction statuses only in
+ * interaction\process\ipn callbacks not in success\fail\panding page
+ * callbacks.
+ *
+ * @param mixed $payment_method
+ *   Drupal payment method passed via url arg.
+ * @param bool $is_interaction
+ *   Fallback call flag.
+ */
+function commerce_robokassa_interaction($payment_method, $is_interaction = TRUE) {
+  // @todo refactor
+
+// Retrieve the SCI from $_POST if the caller did not supply an SCI array.
+// Note that Drupal has already run stripslashes() on the contents of the
+// $_POST array at this point, so we don't need to worry about them.
+  $data = $_POST;
+  $transaction = _commerce_robokassa_validate_post($data, $payment_method, $is_interaction);
+
+  $transaction->message = 'Payment method: @method';
+  $transaction->message_variables = array('@method' => $data['ik_pw_via']);
+  $transaction->remote_id = (isset($data['ik_trn_id']) ? $data['ik_trn_id'] : 0);
+  $transaction->remote_status = $data['ik_inv_st'];
+  $transaction->payload = $data;
+  $order = commerce_order_load($transaction->order_id);
+  $order->data['active_transaction_status'] = $data['ik_inv_st'];
+
+  switch ($data['ik_inv_st']) {
+    case 'success':
+      $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+      commerce_payment_redirect_pane_next_page($order);
+      break;
+
+    case 'fail':
+    case 'canceled':
+      $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
+      commerce_payment_redirect_pane_previous_page($order);
+      break;
+
+    case 'new':
+    case 'waitAccept':
+    case 'process':
+      $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
+      commerce_payment_redirect_pane_next_page($order);
+      break;
+  }
+  commerce_payment_transaction_save($transaction);
+}
+
+/**
+ * Returns the default value for the checkout completion message settings form.
+ *
+ * @return array
+ *   Prepared default wait message.
+ */
+function commerce_robokassa_wait_message_default() {
+  // If the Filtered HTML text format is available, use a default value with
+  // links in it.
+  if (filter_format_load('filtered_html')) {
+    $value = 'Your order number is [commerce-order:order-number]. Payment gateway will process your payment shortly and notify us.  You can <a href="[commerce-order:url]">view your order</a> status on your account page when logged in.'
+      . "\n\n" . '<a href="[site:url]">Return to the front page.</a>';
+    $format = 'filtered_html';
+  }
+  else {
+    // Otherwise select a fallback format and use a plaint text default value.
+    $value = 'Your order number is [commerce-order:order-number]. Payment gateway will process your payment shortly and notify us.  You can view your order status on your account page when logged in.';
+    $format = filter_fallback_format();
+  }
+
+  return array('value' => $value, 'format' => $format);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function commerce_robokassa_form_commerce_checkout_form_complete_alter(&$form, &$form_state, $form_id) {
+  // @todo refactor
+  if ($form['checkout_completion_message']['message']) {
+
+    $order = $form_state['order'];
+    $wait_statuses = array('new','waitAccept', 'process');
+    $active_transaction_status = (isset($order->data['active_transaction_status']) ? $order->data['active_transaction_status'] : '');
+    if (in_array($active_transaction_status, $wait_statuses)) {
+      $wait_message = variable_get('commerce_robokassa_wait_message', commerce_robokassa_wait_message_default());
+      $wait_message['value'] = token_replace($wait_message['value'], array('commerce-order' => $order), array('clear' => TRUE));
+      $wait_message['value'] = check_markup($wait_message['value'], $wait_message['format']);
+      $form['checkout_completion_message']['message']['#markup'] = '<div class="checkout-completion-message">' . $wait_message['value'] . '</div>';
+    }
+  }
+}
+
+/**
+ * Default Robokassa settings getter.
+ *
+ * @return array
+ *   Default settings array.
+ */
+function commerce_robokassa_default_settings() {
+  return array(
+    'MrchLogin' => '',
+    'pass1' => '',
+    'pass2' => '',
+    'server' => array('test'),
+    'show_robokassa_fee_message' => TRUE,
+    'wait_message' => variable_get('commerce_robokassa_wait_message', commerce_robokassa_wait_message_default()),
+  );
+}
+
+/**
+ * Helper for getting IK supported currencies.
+ *
+ * @return array
+ */
+function _commerce_robokassa_get_supported_currencies() {
+  // @todo refactor
+  return array(
+    'USD' => t('USD'),
+    'EUR' => t('EUR'),
+    'UAH' => t('UAH'),
+    'RUB' => t('RUB'),
+  );
+}
+
+/**
+ * Payment method callback: settings form.
+ *
+ * @param mixed $settings
+ *   Payment method instance settings.
+ *
+ * @return array
+ *   Settings form array.
+ */
+function commerce_robokassa_settings_form($settings = NULL) {
+  $form = array();
+
+  $settings = (array) $settings + commerce_robokassa_default_settings();
+
+  $form['MrchLogin'] = array(
+    '#type' => 'textfield',
+    '#title' => t('login'),
+    '#description' => t('Your robokassa login'),
+    '#default_value' => $settings['login'],
+    '#required' => TRUE,
+  );
+
+  $form['pass1'] = array(
+    '#type' => 'textfield',
+    '#title' => t('First password'),
+    '#description' => t('Password 1'),
+    '#default_value' => $settings['pass1'],
+    '#required' => TRUE,
+  );
+
+  $form['pass2'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Second password'),
+    '#description' => t('Password 2'),
+    '#default_value' => $settings['pass2'],
+    '#required' => TRUE,
+  );
+
+  $form['server'] = array(
+    '#type' => 'radios',
+    '#title' => t('Robokassa server'),
+    '#options' => array(
+      'test' => ('Test - use for testing.'),
+      'live' => ('Live - use for processing real transactions'),
+    ),
+    '#default_value' => ($settings['server']) ? $settings['server'] : 'test',
+    '#required' => TRUE,
+  );
+
+  $form['wait_message'] = array(
+    '#type' => 'text_format',
+    '#title' => t('Wait message'),
+    '#default_value' => $settings['wait_message']['value'],
+    '#format' => $settings['wait_message']['format'],
+  );
+
+  $form['show_robokassa_fee_message'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Show robokassa fee message'),
+    '#default_value' => $settings['show_robokassa_fee_message'],
+  );
+
+  return $form;
+}
+
+/**
+ * Payment method validate: settings form.
+ */
+function commerce_robokassa_settings_form_validate($settings = NULL) {
+  // @todo remove
+//  if (valid_url($settings['action_url'])) {
+//    form_set_error(t('Action URL'), t('You must enter a valid url.'));
+//  }
+}
+
+/**
+ * Payment method callback: adds a message and CSS to the submission form.
+ */
+function commerce_robokassa_submit_form($payment_method, $pane_values, $checkout_pane, $order) {
+  // @todo add payways list and show payment gateway price per payways
+  global $language;
+  $logo_path = drupal_get_path('module', 'commerce_robokassa') . '/images/logo.gif';
+  $image = array(
+    '#theme' => 'image',
+    '#path' => $logo_path,
+    '#alt' => 'robokassa',
+    '#title' => 'robokassa',
+  );
+  $form['robokassa_logo'] = array(
+    '#markup' => '<div class="commerce-robokassa-logo">' . render($image) . '</div>',
+  );
+  if ($payment_method['settings']['show_robokassa_fee_message']) {
+    $form['robokassa_fee_message'] = array(
+      '#markup' => '<div class="commerce-robokassa-fee-message">' . t('In addition to the order amount robokassa fee can be charged.') . '</div>',
+    );
+  }
+
+  return $form;
+}
+
+/**
+ * Payment method callback: redirect form, building a robokassa form.
+ */
+function commerce_robokassa_redirect_form($form, &$form_state, $order, $payment_method) {
+  // Return an error if the enabling action's settings haven't been configured.
+  if (empty($payment_method['settings']['MrchLogin']) || empty($payment_method['settings']['pass1'])) {
+    drupal_set_message(t('robokassa is not configured for use.'), 'error');
+    return array();
+  }
+
+  return commerce_robokassa_order_form($form, $form_state, $order, $payment_method['settings']);
+}
+
+/**
+ * Builds a robokassa form from an order object.
+ */
+function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
+  $form['#action'] = commerce_robokassa_server_url($settings['server']);
+  $form['#attributes'] = array(
+    'name' => 'payment',
+    'accept-charset' => 'UTF-8',
+  );
+  $form['#method'] = 'post';
+
+  $transaction = $order->data['active_transaction'];
+  $amount = commerce_currency_amount_to_decimal($transaction->amount, $transaction->currency_code);
+
+  $settings["OutSum"] = $amount;
+  $settings["InvId"] = $transaction->transaction_id;
+  $settings["shp_order_id"] = $order->order_id;
+  // For test transactions
+  if ($settings['server'] == 'test') {
+    $form["IsTest"] = '1';
+  }
+
+  $signature_data = array(
+    $settings['MrchLogin'],
+    $amount,
+    $transaction->transaction_id,
+    $settings['pass1'],
+    'shp_order_id=' . $order->order_id,
+  );
+
+  // Calculate signature.
+  $settings['SignatureValue'] = md5(implode(':', $signature_data));
+
+  unset($settings['server']);
+  unset($settings['wait_message']);
+  unset($settings['show_robokassa_fee_message']);
+
+  foreach ($settings as $name => $value) {
+    if (!empty($value) && $name != 'pass1' && $name != 'pass2') {
+      $form[$name] = array('#type' => 'hidden', '#value' => $value);
+    }
+  }
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $form['Desc'] = array(
+    '#type' => 'hidden',
+    '#value' => t('Order ID: !orderid, User mail: !mail',
+      array('!orderid' => $order->order_id, '!mail' => $order_wrapper->mail->value())),
+  );
+
+  $form['process'] = array(
+    '#type' => 'submit',
+    '#value' => t('Proceed to robokassa'),
+  );
+
+  return $form;
+}
+
+/**
+ * Payment method callback: submit form submission.
+ *
+ * Pass transaction to redirect form as value for ik_pm_no key and track
+ * https://www.drupal.org/project/commerce_partial_payment because
+ * robokassa SCI can send payment notification in other order that
+ * users really pay on site.
+ *
+ * There is no transaction object in redirect form callback so pass
+ * it via $order->data property for proper IK ik_pm_no using. Why
+ * all payment method callbacks gets only $order object and not active
+ * transaction.
+ */
+function commerce_robokassa_submit_form_submit($payment_method, $pane_form, $pane_values, $order, $charge) {
+  $order->data['commerce_robokassa'] = $pane_values;
+  $order->data['active_transaction'] = commerce_robokassa_transaction($payment_method, $order, $charge);
+}
+
+/**
+ * Creates an payment transaction for the specified charge amount.
+ *
+ * @param mixed $payment_method
+ *   Drupal commerce payment method instance.
+ * @param object $order
+ *   Drupal commerce order object.
+ * @param mixed $charge
+ *   Amount to be charged.
+ *
+ * @return mixed
+ *   Created transaction.
+ */
+function commerce_robokassa_transaction($payment_method, $order, $charge) {
+  $transaction = commerce_payment_transaction_new('commerce_robokassa', $order->order_id);
+  $transaction->instance_id = $payment_method['instance_id'];
+  $transaction->amount = $charge['amount'];
+  $transaction->currency_code = $charge['currency_code'];
+  $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
+  $transaction->message = 'User redirected to robokassa';
+  commerce_payment_transaction_save($transaction);
+  return $transaction;
+}
+
+/**
+ * Returns the URL to the specified Robokassa server.
+ *
+ * @param string $server
+ *   Either test or live indicating which server to get the URL for.
+ *
+ * @return string
+ *   The URL to use to submit requests to the Robokassa server.
+ */
+function commerce_robokassa_server_url($server) {
+  $servers = array(
+    'test' => 'https://auth.robokassa.ru/Merchant/Index.aspx',
+    'live' => 'https://auth.robokassa.ru/Merchant/Index.aspx',
+  );
+  return $servers[$server];
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Removes drupal-related form_ids from final redirect.
+ */
+function commerce_robokassa_form_commerce_checkout_form_payment_alter(&$form, &$form_state, $form_id) {
+  unset($form["#form_id"]);
+  unset($form["form_id"]);
+  unset($form["form_token"]);
+  unset($form["form_build_id"]);
+}

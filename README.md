@@ -19,6 +19,6 @@ https://www.robokassa.ru and create your own merchant.
 That's it :)
 
 Additional information:
-Default Success url - /commerce_robokassa/commerce_robokassa/status
-Default Fail url - /commerce_robokassa/commerce_interkassa/status
+Default Success url - /commerce_robokassa/commerce_robokassa/success
+Default Fail url - /commerce_robokassa/commerce_robokassa/fail
 Default Result url - /commerce_robokassa/commerce_robokassa/result

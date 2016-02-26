@@ -33,7 +33,7 @@ function commerce_robokassa_menu() {
   $items['commerce_robokassa/%commerce_robokassa_pm/%'] = array(
     'title' => 'Payment status',
     'page callback' => 'commerce_robokassa_status',
-    'page arguments' => array(1),
+    'page arguments' => array(1, 2),
     'access callback' => TRUE,
     'type' => MENU_CALLBACK,
   );

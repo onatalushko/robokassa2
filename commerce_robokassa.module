@@ -115,7 +115,7 @@ function commerce_robokassa_status($payment_method, $status) {
  *
  * For commerce robokassa 7.x-2.x order id send as shp_order_id custom
  * parameter.
- *
+ *IsTest
  * @param int $inv_id
  *   Robokassa InvId value.
  * @param int $order_id
@@ -429,7 +429,7 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
   $settings["shp_order_id"] = $order->order_id;
   // For test transactions
   if ($settings['server'] == 'test') {
-    $form["IsTest"] = '1';
+    $settings['IsTest'] = '1';
   }
 
   $signature_data = array(

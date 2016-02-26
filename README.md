@@ -1,4 +1,4 @@
-# robokassa2
+# Commerce robokassa 7.x-2.x
 
 This module contains basic integration with Robokassa.
 https://www.robokassa.ru

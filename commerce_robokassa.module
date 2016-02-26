@@ -208,7 +208,7 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
       $sign = hash($settings['hash_type'], implode(':', $signature_data));
 
       // Exit now if missing Signature.
-      if ($robo_sign != $sign) {
+      if (drupal_strtoupper($robo_sign) != drupal_strtoupper($sign)) {
         watchdog('commerce_robokassa', 'Missing Signature.  POST data: !data', array('!data' => print_r($data, TRUE)), WATCHDOG_WARNING);
         print "bad sign";
         drupal_exit();

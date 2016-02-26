@@ -292,7 +292,7 @@ function commerce_robokassa_default_settings() {
     'MrchLogin' => '',
     'pass1' => '',
     'pass2' => '',
-    'server' => array('test'),
+    'server' => 'test',
     'hash_type' => 'md5',
     'show_robokassa_fee_message' => TRUE,
   );

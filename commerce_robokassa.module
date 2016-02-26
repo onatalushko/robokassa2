@@ -232,17 +232,17 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
 /**
  * Page callback: commerce_robokassa/%commerce_robokassa_pm/result.
  *
- * I do not use default payment method redirect_validate  because
- * in checkout/' . $order->order_id . '/payment/return/' .
+ * I do not use default payment method redirect_validate  with return urls
+ * checkout/' . $order->order_id . '/payment/return/' .
  *       $order->data['payment_redirect_key']
  * and checkout/ ' . $order->order_id . '/payment/back/' .
  *       $order->data['payment_redirect_key']
- * callbacks that calls CALLBACK_redirect_validate payment transaction
- * processing and user redirect are combined.
- * So delayed payment processing is impossible also all payment systems
- * require change order\transaction statuses only in
- * interaction\process\ipn callbacks not in success\fail\panding page
- * callbacks.
+ * that calls CALLBACK_redirect_validate payment transaction
+ * processing and user redirect are combined and robokassa does not support 
+ * dinamic return urls.
+ * Also payment processing for all payment systems require change 
+ * order\transaction statuses only in interaction\process\ipn callbacks 
+ * not in success\fail\panding page callbacks.
  *
  * @param mixed $payment_method
  *   Drupal payment method passed via url arg.

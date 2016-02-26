@@ -84,7 +84,6 @@ function commerce_robokassa_status($payment_method, $status) {
   }
 
   $data = $_POST;
-
   if ($status != 'success') {
     commerce_robokassa_result($payment_method, FALSE);
   }
@@ -169,7 +168,10 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
   }
 
   // Exit now if any required keys are not exists in $_POST.
-  $required_keys = array('OutSum','InvId','SignatureValue');
+  $required_keys = array('OutSum','InvId');
+  if ($is_interaction) {
+    $required_keys[] = 'SignatureValue';
+  }
   $unavailable_required_keys = array_diff_key(array_flip($required_keys), $data);
   if (!empty($unavailable_required_keys)) {
     watchdog('commerce_robokassa', 'Missing POST keys. POST data: <pre>!data</pre>', array('!data' => print_r($unavailable_required_keys, TRUE)), WATCHDOG_WARNING);
@@ -230,63 +232,6 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
 }
 
 /**
- * Helper to validate robokassa $_REQUEST data on fail page.
- *
- * @param mixed $data
- *   $_REQUEST to be validated.
- * @param mixed $payment_method
- *   Drupal commerce payment method instance passed via url param.
- * @param bool $is_interaction
- *   Fallback call flag.
- *
- * @return bool|mixed
- *   Transaction according to POST data or due.
- */
-function _commerce_robokassa_validate_fail($data, $payment_method = FALSE, $is_interaction = TRUE) {
-  // Exit now if the $_POST was empty.
-  if (empty($data)) {
-    watchdog('commerce_robokassa', 'Interaction URL accessed with no POST data submitted.', array(), WATCHDOG_WARNING);
-    print 'bad data';
-    drupal_exit();
-  }
-
-  // Exit now if any required keys are not exists in $_POST.
-  $required_keys = array('OutSum','InvId','q');
-  $unavailable_required_keys = array_diff_key(array_flip($required_keys), $data);
-  if (!empty($unavailable_required_keys)) {
-    watchdog('commerce_robokassa', 'Missing REQUEST keys. REQUEST data: <pre>!data</pre>', array('!data' => print_r($unavailable_required_keys, TRUE)), WATCHDOG_WARNING);
-    print "bad data";
-    drupal_exit();
-  }
-
-  $settings = (isset($payment_method['settings']) ? $payment_method['settings'] : commerce_robokassa_default_settings());
-  // Exit now if missing Checkout ID.
-  if ($payment_method && preg_match('/^commerce_robokassa\\/.*\\/fail$/', $data['q'])) {
-    $info = array(
-      '!settings' => print_r($payment_method, 1),
-      '!data' => print_r($data, TRUE),
-    );
-    watchdog('commerce_robokassa !data', 'Missing request.  REQUEST data: <pre>!data</pre> <pre>!settings</pre>',
-      $info, WATCHDOG_WARNING);
-    print 'bad data';
-    drupal_exit();
-  }
-  
-  // This parameter availability is flag for 7.x.2.x transactions.
-  $shp_order_id = isset($data['shp_order_id']) ? $data['shp_order_id'] : FALSE;
-  $transaction = _commerce_robokassa_transaction_load($data['InvId'], $shp_order_id);
-
-  if (!$transaction) {
-    watchdog('commerce_robokassa', 'Missing transaction id.  POST data: !data', array('!data' => print_r($data, TRUE)), WATCHDOG_WARNING);
-    print 'bad data';
-    drupal_exit();
-  }
-
-  return $transaction;
-}
-
-
-/**
  * Page callback: commerce_robokassa/%commerce_robokassa_pm/result.
  *
  * I do not use default payment method redirect_validate  with return urls
@@ -310,13 +255,9 @@ function commerce_robokassa_result($payment_method, $is_result = TRUE) {
 // Retrieve the SCI from $_POST if the caller did not supply an SCI array.
 // Note that Drupal has already run stripslashes() on the contents of the
 // $_POST array at this point, so we don't need to worry about them.
-  $data = $is_result ? $_POST : $_REQUEST;
-  if (!$is_result) {
-    $transaction = _commerce_robokassa_validate_fail($data, $payment_method, $is_result);
-  }
-  else {
-    $transaction = _commerce_robokassa_validate_post($data, $payment_method, $is_result);
-  }
+  $data =  $_POST;
+  
+  $transaction = _commerce_robokassa_validate_post($data, $payment_method, $is_result);
 
   $transaction->message_variables = array();
   // Not supported by Robokassa.

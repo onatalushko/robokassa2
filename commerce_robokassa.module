@@ -419,7 +419,7 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
     'accept-charset' => 'UTF-8',
   );
   $form['#method'] = 'post';
-  $form['#pre_render'] = '_commerce_robokassa_clean_form';
+  $form['#pre_render'] = array('_commerce_robokassa_clean_form');
 
   $transaction = $order->data['active_transaction'];
   $amount = commerce_currency_amount_to_decimal($transaction->amount, $transaction->currency_code);

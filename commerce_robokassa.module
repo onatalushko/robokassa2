@@ -254,7 +254,7 @@ function commerce_robokassa_result($payment_method, $is_result = TRUE) {
 // Retrieve the SCI from $_POST if the caller did not supply an SCI array.
 // Note that Drupal has already run stripslashes() on the contents of the
 // $_POST array at this point, so we don't need to worry about them.
-  $data = $_POST;
+  $data = $is_result ? $_POST : $_REQUEST;
   $transaction = _commerce_robokassa_validate_post($data, $payment_method, $is_result);
 
   $transaction->message_variables = array();

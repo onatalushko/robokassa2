@@ -267,7 +267,7 @@ function commerce_robokassa_result($payment_method, $is_result = TRUE) {
   $order = commerce_order_load($transaction->order_id);
 
   if ($is_result) {
-    $remote_payment_method = isset($data['PaymentMethod']) ? $data['PaymentMethod'] : 'Robokassa'
+    $remote_payment_method = isset($data['PaymentMethod']) ? $data['PaymentMethod'] : 'Robokassa';
     $transaction->message_variables = array('!remote_payment_method' => $remote_payment_method);
     $transaction->message = t('Success payment via !remote_payment_method');
     $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;

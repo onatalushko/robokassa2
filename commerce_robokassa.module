@@ -381,7 +381,7 @@ function commerce_robokassa_settings_form($settings = NULL) {
  */
 function commerce_robokassa_submit_form($payment_method, $pane_values, $checkout_pane, $order) {
   // @todo add payways list and show payment gateway price per payways
-  $logo_path = drupal_get_path('module', 'commerce_robokassa') . '/images/logo.gif';
+  $logo_path = drupal_get_path('module', 'commerce_robokassa') . '/images/logo.png';
   $image = array(
     '#theme' => 'image',
     '#path' => $logo_path,

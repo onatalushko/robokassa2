@@ -15,7 +15,7 @@ function commerce_robokassa_commerce_payment_method_info() {
   $payment_methods = array();
 
   $payment_methods['commerce_robokassa'] = array(
-    'title' => t('robokassa'),
+    'title' => t('Robokassa'),
     'description' => t('Provides the payment method for robokassa service.'),
     'active' => TRUE,
     'terminal' => FALSE,
@@ -316,7 +316,7 @@ function commerce_robokassa_settings_form($settings = NULL) {
     '#type' => 'textfield',
     '#title' => t('login'),
     '#description' => t('Your robokassa login'),
-    '#default_value' => $settings['login'],
+    '#default_value' => $settings['MrchLogin'],
     '#required' => TRUE,
   );
 
@@ -343,7 +343,7 @@ function commerce_robokassa_settings_form($settings = NULL) {
       'test' => t('Test - use for testing.'),
       'live' => t('Live - use for processing real transactions'),
     ),
-    '#default_value' => $settings['server'] ? $settings['server'] : 'test',
+    '#default_value' => $settings['server'],
     '#required' => TRUE,
   );
 
@@ -358,7 +358,7 @@ function commerce_robokassa_settings_form($settings = NULL) {
       'sha384' => 'sha384',
       'sha512' => 'sha512',
     ),
-    '#default_value' => $settings['hash_type'] ? $settings['hash_type'] : 'md5',
+    '#default_value' => $settings['hash_type'],
     '#required' => TRUE,
   );
 
@@ -380,8 +380,8 @@ function commerce_robokassa_submit_form($payment_method, $pane_values, $checkout
   $image = array(
     '#theme' => 'image',
     '#path' => $logo_path,
-    '#alt' => 'robokassa',
-    '#title' => 'robokassa',
+    '#alt' => t('Robokassa'),
+    '#title' => t('Robokassa'),
   );
   $form['robokassa_logo'] = array(
     '#markup' => '<div class="commerce-robokassa-logo">' . render($image) . '</div>',

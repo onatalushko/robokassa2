@@ -261,7 +261,7 @@ function _commerce_robokassa_validate_fail($data, $payment_method = FALSE, $is_i
 
   $settings = (isset($payment_method['settings']) ? $payment_method['settings'] : commerce_robokassa_default_settings());
   // Exit now if missing Checkout ID.
-  if ($payment_method && preg_match('/^commerce_robokassa\\/.*\\/fail$/', $data['q']);) {
+  if ($payment_method && preg_match('/^commerce_robokassa\\/.*\\/fail$/', $data['q'])) {
     $info = array(
       '!settings' => print_r($payment_method, 1),
       '!data' => print_r($data, TRUE),
@@ -312,7 +312,7 @@ function commerce_robokassa_result($payment_method, $is_result = TRUE) {
 // $_POST array at this point, so we don't need to worry about them.
   $data = $is_result ? $_POST : $_REQUEST;
   if (!$is_result) {
-    $transaction = _commerce_robokassa_validate_fail($data, $payment_method, $is_result)
+    $transaction = _commerce_robokassa_validate_fail($data, $payment_method, $is_result);
   }
   else {
     $transaction = _commerce_robokassa_validate_post($data, $payment_method, $is_result);

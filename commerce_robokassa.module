@@ -172,6 +172,7 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
   $required_keys = array('OutSum','InvId','SignatureValue');
   $unavailable_required_keys = array_diff_key(array_flip($required_keys), $data);
   if (!empty($unavailable_required_keys)) {
+    watchdog('commerce_robokassa', 'REQUEST data: <pre>!data</pre>', array('!data' => print_r($_REQUEST, TRUE)), WATCHDOG_WARNING);
     watchdog('commerce_robokassa', 'Missing POST keys. POST data: <pre>!data</pre>', array('!data' => print_r($unavailable_required_keys, TRUE)), WATCHDOG_WARNING);
     print "bad data";
     drupal_exit();

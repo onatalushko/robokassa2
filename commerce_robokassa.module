@@ -90,8 +90,8 @@ function commerce_robokassa_status($payment_method, $status) {
 
   if (isset($data['InvId'])) {
     // This parameter availability is flag for 7.x.2.x transactions.
-    $shp_trxid = isset($data['shp_trxid']) ? $data['shp_trxid'] : FALSE;
-    $transaction = _commerce_robokassa_transaction_load($data['InvId'], $shp_trxid);
+    $shp_trx_id = isset($data['shp_trx_id']) ? $data['shp_trx_id'] : FALSE;
+    $transaction = _commerce_robokassa_transaction_load($data['InvId'], $shp_trx_id);
     if ($transaction) {
       $order = commerce_order_load($transaction->order_id);
       if ($order) {
@@ -109,26 +109,26 @@ function commerce_robokassa_status($payment_method, $status) {
 /**
  * Payment transaction load helper.
  *
- * Commerce robokassa 7.x-2.x send transaction GUID as shp_trxid
+ * Commerce robokassa 7.x-2.x send transaction GUID as shp_trx_id
  * custom parameter.
  *
  * @param int $inv_id
  *   Robokassa InvId value.
- * @param int $shp_trxid
+ * @param int $shp_trx_id
  *   Commerce transaction guid for 7.x-2.x, empty for 7.x-1.x.
  *
  * @return object|bool
  *   Commerce payment transaction object or FALSE otherwise.
  */
-function _commerce_robokassa_transaction_load($inv_id, $shp_trxid = FALSE) {
+function _commerce_robokassa_transaction_load($inv_id, $shp_trx_id = FALSE) {
   if (!is_numeric($inv_id)) {
     return FALSE;
   }
 
   // Transaction key 'order_id' used for 7.x-1.x transactions.
   // Transaction key 'remote_id' used for 7.x-2.x transactions.
-  $transaction_key = $shp_trxid ? 'remote_id' : 'order_id';
-  $transaction_key_val = $shp_trxid ? $shp_trxid : $inv_id;
+  $transaction_key = $shp_trx_id ? 'remote_id' : 'order_id';
+  $transaction_key_val = $shp_trx_id ? $shp_trx_id : $inv_id;
 
   $query = new EntityFieldQuery();
   $query->entityCondition('entity_type', 'commerce_payment_transaction')
@@ -201,8 +201,8 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
         $data['InvId'],
         $settings['pass2'],
       );
-      if (isset($data['shp_trxid'])) {
-        $signature_data[] = 'shp_trxid=' . $data['shp_trxid'];
+      if (isset($data['shp_trx_id'])) {
+        $signature_data[] = 'shp_trx_id=' . $data['shp_trx_id'];
       }
 
       $sign = hash($settings['hash_type'], implode(':', $signature_data));
@@ -217,8 +217,8 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
   }
 
   // This parameter availability is flag for 7.x.2.x transactions.
-  $shp_trxid = isset($data['shp_trxid']) ? $data['shp_trxid'] : FALSE;
-  $transaction = _commerce_robokassa_transaction_load($data['InvId'], $shp_trxid);
+  $shp_trx_id = isset($data['shp_trx_id']) ? $data['shp_trx_id'] : FALSE;
+  $transaction = _commerce_robokassa_transaction_load($data['InvId'], $shp_trx_id);
 
   if (!$transaction) {
     watchdog('commerce_robokassa', 'Missing transaction id.  POST data: !data', array('!data' => print_r($data, TRUE)), WATCHDOG_WARNING);
@@ -433,7 +433,7 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
 
   $settings["OutSum"] = $amount;
   $settings["InvId"] = $order->order_id;
-  $settings["shp_trxid"] = $transaction->remote_id;
+  $settings["shp_trx_id"] = $transaction->remote_id;
   // For test transactions.
   if ($settings['server'] == 'test') {
     $settings['IsTest'] = '1';
@@ -444,7 +444,7 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
     $amount,
     $settings["InvId"],
     $settings['pass1'],
-    'shp_trxid=' . $settings["shp_trxid"],
+    'shp_trx_id=' . $settings["shp_trx_id"],
   );
 
   // Calculate signature.

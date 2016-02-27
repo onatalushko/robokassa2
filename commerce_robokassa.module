@@ -446,10 +446,9 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
   // Calculate signature.
   $settings['SignatureValue'] = hash($settings['hash_type'], implode(':', $signature_data));
 
-  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
   $inv_desc_params = array(
     '!orderid' => $order->order_id,
-    '!mail' => $order_wrapper->mail->value(),
+    '!mail' => $order->mail,
   );
   $inv_desc = t('Order ID: !orderid, User mail: !mail', $inv_desc_params);
   $settings['InvDesc'] = truncate_utf8($inv_desc, 100);

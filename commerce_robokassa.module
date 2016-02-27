@@ -127,14 +127,14 @@ function _commerce_robokassa_transaction_load($inv_id, $order_id = 0) {
   if (!is_numeric($inv_id) || !is_numeric($order_id)) {
     return FALSE;
   }
-  if ($order_id !== 0) {
-    return commerce_payment_transaction_load($inv_id);
-  }
 
-  // Commerce robokassa 7.x-1.x support.
+  // Transaction key 'order_id' used for 7.x-1.x transactions.
+  // Transaction key 'remote_id' used for 7.x-2.x transactions.
+  $transaction_key = $order_id !== 0 ? 'remote_id' : 'order_id';
+
   $query = new EntityFieldQuery();
   $query->entityCondition('entity_type', 'commerce_payment_transaction')
-    ->propertyCondition('order_id', $inv_id)
+    ->propertyCondition($transaction_key, $inv_id)
     ->propertyCondition('payment_method', 'commerce_robokassa')
     ->range(0, 1);
   $result = $query->execute();
@@ -260,8 +260,6 @@ function commerce_robokassa_result($payment_method, $is_result = TRUE) {
   $transaction = _commerce_robokassa_validate_post($data, $payment_method, $is_result);
 
   $transaction->message_variables = array();
-  // Not supported by Robokassa.
-  $transaction->remote_id = 0;
   $transaction->remote_status = '';
   $transaction->payload = $data;
   $order = commerce_order_load($transaction->order_id);
@@ -430,7 +428,8 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
   $amount = commerce_currency_amount_to_decimal($transaction->amount, $transaction->currency_code);
 
   $settings["OutSum"] = $amount;
-  $settings["InvId"] = $transaction->transaction_id;
+  // We can't use transaction id here because possible csrf attack.
+  $settings["InvId"] = $transaction->remote_id;
   $settings["shp_order_id"] = $order->order_id;
   // For test transactions
   if ($settings['server'] == 'test') {
@@ -514,6 +513,13 @@ function commerce_robokassa_transaction($payment_method, $order, $charge) {
   $transaction->currency_code = $charge['currency_code'];
   $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
   $transaction->message = 'User redirected to robokassa';
+  // Robokassa does not support remote ID in response so populate
+  // transaction->remote_id with rundom int. This value will be used as
+  // Robokassa InvId request parameter.
+  // We can't use transaction id as value for InvId because possible
+  // csrf attack. Also we can't use hash or any non int value for InvId
+  // because documentation requirements.
+  $transaction->remote_id = rand(1, 2147483647);
   commerce_payment_transaction_save($transaction);
   return $transaction;
 }

@@ -114,7 +114,7 @@ function commerce_robokassa_status($payment_method, $status) {
  *
  * For commerce robokassa 7.x-2.x order id send as shp_order_id custom
  * parameter.
- *IsTest
+ *
  * @param int $inv_id
  *   Robokassa InvId value.
  * @param int $order_id
@@ -194,7 +194,7 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
 
   if ($is_interaction) {
     if ($payment_method) {
-      // robokassa Signature.
+      // Robokassa Signature.
       $robo_sign = $data['SignatureValue'];
 
       // Create own Signature.
@@ -240,10 +240,10 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
  * and checkout/ ' . $order->order_id . '/payment/back/' .
  *       $order->data['payment_redirect_key']
  * that calls CALLBACK_redirect_validate payment transaction
- * processing and user redirect are combined and robokassa does not support 
- * dinamic return urls.
- * Also payment processing for all payment systems require change 
- * order\transaction statuses only in interaction\process\ipn callbacks 
+ * processing and user redirect are combined and robokassa does not support
+ * dynamic return urls.
+ * Also payment processing for all payment systems require change
+ * order\transaction statuses only in interaction\process\ipn callbacks
  * not in success\fail\panding page callbacks.
  *
  * @param mixed $payment_method
@@ -252,11 +252,11 @@ function _commerce_robokassa_validate_post($data, $payment_method = FALSE, $is_i
  *   Fallback call flag.
  */
 function commerce_robokassa_result($payment_method, $is_result = TRUE) {
-// Retrieve the SCI from $_POST if the caller did not supply an SCI array.
-// Note that Drupal has already run stripslashes() on the contents of the
-// $_POST array at this point, so we don't need to worry about them.
-  $data =  $_POST;
-  
+  // Retrieve the SCI from $_POST if the caller did not supply an SCI array.
+  // Note that Drupal has already run stripslashes() on the contents of the
+  // $_POST array at this point, so we don't need to worry about them.
+  $data = $_POST;
+
   $transaction = _commerce_robokassa_validate_post($data, $payment_method, $is_result);
 
   $transaction->message_variables = array();
@@ -422,7 +422,6 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
     'accept-charset' => 'UTF-8',
   );
   $form['#method'] = 'post';
-  // $form['#pre_render'][] = '_commerce_robokassa_clean_form';
 
   $transaction = $order->data['active_transaction'];
   $amount = commerce_currency_amount_to_decimal($transaction->amount, $transaction->currency_code);
@@ -431,7 +430,7 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
   // We can't use transaction id here because possible csrf attack.
   $settings["InvId"] = $transaction->remote_id;
   $settings["shp_order_id"] = $order->order_id;
-  // For test transactions
+  // For test transactions.
   if ($settings['server'] == 'test') {
     $settings['IsTest'] = '1';
   }
@@ -457,7 +456,7 @@ function commerce_robokassa_order_form($form, &$form_state, $order, $settings) {
 
   $skiped_settings = array(
     'server',
-    'show_robokassa_fee_message'.
+    'show_robokassa_fee_message',
     'pass1',
     'pass2',
     'hash_type',
@@ -514,10 +513,10 @@ function commerce_robokassa_transaction($payment_method, $order, $charge) {
   $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
   $transaction->message = 'User redirected to robokassa';
   // Robokassa does not support remote ID in response so populate
-  // transaction->remote_id with rundom int. This value will be used as
+  // transaction->remote_id with random int. This value will be used as
   // Robokassa InvId request parameter.
   // We can't use transaction id as value for InvId because possible
-  // csrf attack. Also we can't use hash or any non int value for InvId
+  // CSRF attack. Also we can't use hash or any non int value for InvId
   // because documentation requirements.
   $transaction->remote_id = rand(1, 2147483647);
   commerce_payment_transaction_save($transaction);
@@ -539,13 +538,4 @@ function commerce_robokassa_server_url($server) {
     'live' => 'https://auth.robokassa.ru/Merchant/Index.aspx',
   );
   return $servers[$server];
-}
-
-/**
- * Removes drupal-related form_ids from final redirect.
- */
-function _commerce_robokassa_clean_form(&$form) {
-  unset($form["form_id"]);
-  unset($form["form_token"]);
-  unset($form["form_build_id"]);
 }
